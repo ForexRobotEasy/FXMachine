@@ -1,0 +1,101 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                            FXMachine.mq5         |
+//|                   Copyright 2022, Forex Robot Easy Team           |
+//|                                   https://www.forexroboteasy.com  |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Include necessary libraries and define global variables           |
+//+------------------------------------------------------------------+
+#include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+#include <Trade\SymbolInfo.mqh>
+
+CTrade trade; // Trade object for executing orders
+CSymbolInfo symbol; // SymbolInfo object for retrieving symbol information
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Initialize trade and symbol objects
+   trade.SetExpertMagicNumber(123456); // Set magic number for the expert advisor
+   symbol.Name(Symbol()); // Set the current symbol for the symbol object
+
+   // Set up necessary trading parameters
+   trade.SetSlippage(3); // Set maximum allowed slippage in pips
+   trade.SetStopLoss(100); // Set stop loss level in pips
+   trade.SetTakeProfit(200); // Set take profit level in pips
+
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert start function                                            |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   // Check if there are any open positions
+   if (trade.PositionsTotal() > 0)
+   {
+      // Monitor open positions and adjust trading parameters as needed
+      for (int i = 0; i < trade.PositionsTotal(); i++)
+      {
+         CPositionInfo position; // PositionInfo object for retrieving position information
+         position.SelectByIndex(i); // Select the current position
+         
+         // Check if the stop loss or take profit levels need to be adjusted
+         if (position.StopLoss() != trade.StopLoss() || position.TakeProfit() != trade.TakeProfit())
+         {
+            trade.PositionModify(position.PositionTicket(), position.PositionType(), position.PositionOpenPrice(), position.PositionVolume(), trade.StopLoss(), trade.TakeProfit());
+         }
+      }
+   }
+   else
+   {
+      // Identify optimal trade entry and exit points
+      double entryPrice = symbol.Ask(); // Use current Ask price as the entry price
+      double exitPrice = symbol.Bid(); // Use current Bid price as the exit price
+      
+      // Determine the appropriate position size for the trade
+      double positionSize = CalculatePositionSize(entryPrice, 1000); // Calculate position size based on available margin and risk percentage
+      
+      // Execute buy and sell orders
+      trade.Buy(positionSize, entryPrice, 'Buy order'); // Execute a buy order
+      trade.Sell(positionSize, exitPrice, 'Sell order'); // Execute a sell order
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Calculate position size based on available margin and risk        |
+//+------------------------------------------------------------------+
+double CalculatePositionSize(double entryPrice, double riskPercentage)
+{
+   double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE); // Get account balance
+   double margin = symbol.MarginRequired() * entryPrice; // Calculate margin required for the trade
+   double maximumRisk = accountBalance * (riskPercentage / 100); // Calculate maximum risk based on account balance and risk percentage
+   
+   // Calculate position size based on available margin and maximum risk
+   double positionSize = MathFloor(maximumRisk / margin);
+   
+   return(positionSize);
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   // Generate report on trading performance and results
+   double totalProfit = trade.AccountInfoDouble(ACCOUNT_PROFIT); // Get total profit
+   double totalBalance = trade.AccountInfoDouble(ACCOUNT_BALANCE); // Get total balance
+   double drawdown = (totalBalance - totalProfit) / totalBalance * 100; // Calculate drawdown percentage
+   
+   Print('Total Profit: ', totalProfit);
+   Print('Total Balance: ', totalBalance);
+   Print('Drawdown: ', drawdown, '%');
+}
+
+//+------------------------------------------------------------------+
